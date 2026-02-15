@@ -371,5 +371,5 @@ If DSCR is below target, it's usually because one (or more) of these is too aggr
 **Fast levers:** lower Refi LTV, increase NOI lift, extend amortization, or assume a slightly higher refi cap (more conservative value).
 """
 )
-)
+
 
