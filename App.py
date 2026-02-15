@@ -141,7 +141,12 @@ col2.metric("Refi Loan", f"${refi_loan:,.0f}")
 col2.metric("Annual Debt Service", f"${annual_debt:,.0f}")
 
 col3.metric("DSCR", f"{dscr:.2f}")
+
 st.subheader("Refinance Results")
+
+col4.metric("Refi Proceeds (Cash-Out)", f"${refi_proceeds:,.0f}")
+col5.metric("Cash Left In Deal", f"${cash_left_in_deal:,.0f}")
+col6.metric("Cash-Out Multiple", f"{cash_out_multiple:.2f}x")
 
 st.subheader("Investor Return Metrics")
 
@@ -152,6 +157,3 @@ r3.metric("Equity Multiple", f"{equity_multiple:.2f}x")
 
 col4, col5, col6 = st.columns(3)
 
-col4.metric("Refi Proceeds (Cash-Out)", f"${refi_proceeds:,.0f}")
-col5.metric("Cash Left In Deal", f"${cash_left_in_deal:,.0f}")
-col6.metric("Cash-Out Multiple", f"{cash_out_multiple:.2f}x")
