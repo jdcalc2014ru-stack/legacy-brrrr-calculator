@@ -1,5 +1,7 @@
 import streamlit as st
 import numpy as np
+import numpy_financial as npf
+
 st.set_page_config(page_title="Legacy BRRRR Calculator", layout="wide")
 
 st.title("🏢 Legacy Family Fund BRRRR Calculator")
@@ -119,7 +121,7 @@ for y in range(1, hold_years + 1):
 cash_on_cash = (year1_cfe / equity_invested) if equity_invested > 0 else 0
 
 # IRR + Equity Multiple
-irr = np.irr(cashflows) if len(cashflows) > 1 else 0
+irr = npf.irr(cashflows) if len(cashflows) > 1 else 0
 total_distributions = sum([cf for cf in cashflows if cf > 0])
 equity_multiple = (total_distributions / equity_invested) if equity_invested > 0 else 0
 
