@@ -25,7 +25,13 @@ exterior_rehab = st.sidebar.number_input("Exterior Rehab ($)", value=80000.0)
 
 st.sidebar.header("Refi")
 
+st.sidebar.header("Investor Returns")
 
+hold_years = st.sidebar.number_input("Hold Period (Years)", value=5, step=1, min_value=1)
+rent_growth = st.sidebar.number_input("Annual Rent/NOI Growth (%)", value=3.0, step=0.25) / 100
+sale_cost_pct = st.sidebar.number_input("Sale Costs (% of Sale Price)", value=3.0, step=0.25) / 100
+
+exit_cap_sale = st.sidebar.number_input("Exit Cap at Sale (%)", value=float(exit_cap*100), step=0.25) / 100
 
 exit_cap = st.sidebar.number_input("Exit Cap Rate (%)", value=6.5) / 100
 refi_ltv = st.sidebar.number_input("Refi LTV (%)", value=75.0) / 100
@@ -75,6 +81,49 @@ def pmt(rate, nper, pv):
     return (rate * pv) / (1 - (1 + rate) ** (-nper))
 
 annual_debt = pmt(refi_rate, amort_years, refi_loan)
+
+# ---- Investor Returns ----
+equity_invested = cash_left_in_deal  # equity still in deal after cash-out
+
+# Year 1 cash flow to equity (simple)
+year1_cfe = noi - annual_debt
+
+# Build cash flows for IRR (annual)
+cashflows = []
+cashflows.append(-equity_invested)
+
+# Project NOI growth each year (expense ratio stays constant in your model)
+for y in range(1, hold_years + 1):
+    noi_y = noi * ((1 + rent_growth) ** (y - 1))
+    cfe_y = noi_y - annual_debt
+
+    # Final year includes sale proceeds
+    if y == hold_years:
+        noi_sale = noi * ((1 + rent_growth) ** (hold_years - 1))
+        sale_price = noi_sale / exit_cap_sale
+        sale_net = sale_price * (1 - sale_cost_pct)
+
+        # Remaining loan balance after hold_years (annual amort)
+        # annual_debt is the annual payment from your pmt()
+        if refi_rate == 0:
+            remaining_balance = max(refi_loan - (refi_loan / amort_years) * hold_years, 0)
+        else:
+            remaining_balance = refi_loan * ((1 + refi_rate) ** hold_years) - annual_debt * (((1 + refi_rate) ** hold_years - 1) / refi_rate)
+
+        sale_proceeds = max(sale_net - remaining_balance, 0)
+        cfe_y += sale_proceeds
+
+    cashflows.append(cfe_y)
+
+# Cash-on-cash (Year 1)
+cash_on_cash = (year1_cfe / equity_invested) if equity_invested > 0 else 0
+
+# IRR + Equity Multiple
+irr = np.irr(cashflows) if len(cashflows) > 1 else 0
+total_distributions = sum([cf for cf in cashflows if cf > 0])
+equity_multiple = (total_distributions / equity_invested) if equity_invested > 0 else 0
+
+
 dscr = noi / annual_debt
 
 # Output
@@ -91,6 +140,13 @@ col2.metric("Annual Debt Service", f"${annual_debt:,.0f}")
 
 col3.metric("DSCR", f"{dscr:.2f}")
 st.subheader("Refinance Results")
+
+st.subheader("Investor Return Metrics")
+
+r1, r2, r3 = st.columns(3)
+r1.metric("Cash-on-Cash (Year 1)", f"{cash_on_cash*100:.2f}%")
+r2.metric("IRR (Projected)", f"{irr*100:.2f}%")
+r3.metric("Equity Multiple", f"{equity_multiple:.2f}x")
 
 col4, col5, col6 = st.columns(3)
 
