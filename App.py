@@ -1,5 +1,5 @@
 import streamlit as st
-
+import numpy as np
 st.set_page_config(page_title="Legacy BRRRR Calculator", layout="wide")
 
 st.title("🏢 Legacy Family Fund BRRRR Calculator")
@@ -58,7 +58,16 @@ noi = effective_income - expenses
 stabilized_value = noi / exit_cap
 refi_loan = stabilized_value * refi_ltv
 
-import numpy as np
+# --- Refinance Proceeds ---
+all_in_cost = purchase_price + purchase_closing_costs + lender_fees + total_rehab+initial_reserves
+
+# Refi pays off acquisition loan
+refi_proceeds = max(refi_loan - acq_loan, 0)
+
+cash_left_in_deal = max(all_in_cost - refi_proceeds, 0)
+
+cash_out_multiple = (refi_proceeds / cash_needed_at_close) if cash_needed_at_close > 0 else 0
+
 
 def pmt(rate, nper, pv):
     if rate == 0:
@@ -73,7 +82,6 @@ dscr = noi / annual_debt
 st.subheader("Capital Needed")
 st.metric("Cash Needed at Close (All-In)", f"${cash_needed_at_close:,.0f}")
 
-col1, col2, col3 = st.columns(3)
 
 col1.metric("Stabilized NOI", f"${noi:,.0f}")
 col1.metric("Stabilized Value", f"${stabilized_value:,.0f}")
@@ -82,3 +90,10 @@ col2.metric("Refi Loan", f"${refi_loan:,.0f}")
 col2.metric("Annual Debt Service", f"${annual_debt:,.0f}")
 
 col3.metric("DSCR", f"{dscr:.2f}")
+st.subheader("Refinance Results")
+
+col4, col5, col6 = st.columns(3)
+
+col4.metric("Refi Proceeds (Cash-Out)", f"${refi_proceeds:,.0f}")
+col5.metric("Cash Left In Deal", f"${cash_left_in_deal:,.0f}")
+col6.metric("Cash-Out Multiple", f"{cash_out_multiple:.2f}x")
