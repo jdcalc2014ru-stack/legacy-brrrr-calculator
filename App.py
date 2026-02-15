@@ -126,7 +126,7 @@ st.subheader("Refinance Results")
 
 c1, c2, c3 = st.columns(3)
 
-c1.metric("Refi Proceeds (Cash-Out)", f"${refi_pcash_out:,.0f}")
+c1.metric("Refi Proceeds (Cash-Out)", f"${cash_out:,.0f}")
 c2.metric("Cash Left In Deal", f"${cash_left_in_deal:,.0f}")
 c3.metric("Cash-Out Multiple", f"{cash_out_multiple:.2f}x")
 
