@@ -61,10 +61,15 @@ stabilized_value = noi / exit_cap
 refi_loan = stabilized_value * refi_ltv
 
 # Refinance math
-all_in_cost = purchase_price + purchase_closing_costs + lender_fees + total_rehab + initial_reserves
-refi_proceeds = max(refi_loan - acq_loan, 0)
-cash_left_in_deal = max(all_in_cost - refi_proceeds, 0)
-cash_out_multiple = (refi_proceeds / cash_needed_at_close) if cash_needed_at_close > 0 else 0
+# --- Correct BRRRR Refinance Math ---
+
+cash_in_at_close = cash_needed_at_close
+
+cash_out = max(refi_loan - acq_loan, 0)
+
+cash_left_in_deal = max(cash_in_at_close - cash_out, 0)
+
+cash_out_multiple = (cash_out / cash_in_at_close) if cash_in_at_close > 0 else 0
 
 # Debt service
 def pmt(rate, nper, pv):
