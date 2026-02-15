@@ -6,6 +6,11 @@ st.title("🏢 Legacy Family Fund BRRRR Calculator")
 
 st.sidebar.header("Acquisition")
 
+st.sidebar.subheader("Closing & Reserves")
+closing_cost_pct = st.sidebar.number_input("Closing Costs (% of Purchase)", value=2.0, step=0.25) / 100
+lender_fees_pct = st.sidebar.number_input("Lender Fees (% of Loan)", value=1.0, step=0.25) / 100
+initial_reserves = st.sidebar.number_input("Initial Reserves ($)", value=25000.0, step=5000.0)
+
 purchase_price = st.sidebar.number_input("Purchase Price ($)", value=6000000.0, step=50000.0)
 units = st.sidebar.number_input("Units", value=24)
 rent = st.sidebar.number_input("Market Rent per Unit ($/month)", value=1650.0)
@@ -13,18 +18,37 @@ vacancy = st.sidebar.number_input("Vacancy (%)", value=7.0) / 100
 
 st.sidebar.header("Rehab")
 
+st.sidebar.subheader("Rehab Timing")
+rehab_months = st.sidebar.number_input("Rehab Months", value=6, step=1)
 rehab_per_unit = st.sidebar.number_input("Rehab per Unit ($)", value=15000.0)
 exterior_rehab = st.sidebar.number_input("Exterior Rehab ($)", value=80000.0)
 
 st.sidebar.header("Refi")
+
+
 
 exit_cap = st.sidebar.number_input("Exit Cap Rate (%)", value=6.5) / 100
 refi_ltv = st.sidebar.number_input("Refi LTV (%)", value=75.0) / 100
 refi_rate = st.sidebar.number_input("Refi Rate (%)", value=7.25) / 100
 amort_years = st.sidebar.number_input("Amortization (Years)", value=30)
 
+
 # Calculations
 
+
+# --- Cash Needed at Close ---
+total_rehab = rehab_per_unit * units + exterior_rehab
+
+purchase_closing_costs = purchase_price * closing_cost_pct
+
+# Estimate acquisition loan amount (interest-only or bridge assumption)
+acq_ltv = st.sidebar.number_input("Acquisition LTV (%)", value=80.0, step=1.0) / 100
+acq_loan = purchase_price * acq_ltv
+down_payment = purchase_price - acq_loan
+
+lender_fees = acq_loan * lender_fees_pct
+
+cash_needed_at_close = down_payment + purchase_closing_costs + lender_fees + total_rehab + initial_reserves
 gross_rent = units * rent * 12
 effective_income = gross_rent * (1 - vacancy)
 
@@ -45,6 +69,9 @@ annual_debt = pmt(refi_rate, amort_years, refi_loan)
 dscr = noi / annual_debt
 
 # Output
+
+st.subheader("Capital Needed")
+st.metric("Cash Needed at Close (All-In)", f"${cash_needed_at_close:,.0f}")
 
 col1, col2, col3 = st.columns(3)
 
