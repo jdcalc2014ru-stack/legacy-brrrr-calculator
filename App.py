@@ -2,7 +2,7 @@ import streamlit as st
 
 st.set_page_config(page_title="Legacy BRRRR Calculator", layout="wide")
 
-st.title("🏢 Legacy Multifamily BRRRR Calculator")
+st.title("🏢 Legacy Family Fund BRRRR Calculator")
 
 st.sidebar.header("Acquisition")
 
