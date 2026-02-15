@@ -31,7 +31,7 @@ hold_years = st.sidebar.number_input("Hold Period (Years)", value=5, step=1, min
 rent_growth = st.sidebar.number_input("Annual Rent/NOI Growth (%)", value=3.0, step=0.25) / 100
 sale_cost_pct = st.sidebar.number_input("Sale Costs (% of Sale Price)", value=3.0, step=0.25) / 100
 
-exit_cap_sale = st.sidebar.number_input("Exit Cap at Sale (%)", value=float(exit_cap*100), step=0.25) / 100
+exit_cap_sale = st.sidebar.number_input("Exit Cap at Sale (%)", value=6.5, step=0.25) / 100
 
 exit_cap = st.sidebar.number_input("Exit Cap Rate (%)", value=6.5) / 100
 refi_ltv = st.sidebar.number_input("Refi LTV (%)", value=75.0) / 100
