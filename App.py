@@ -82,7 +82,7 @@ dscr = noi / annual_debt
 st.subheader("Capital Needed")
 st.metric("Cash Needed at Close (All-In)", f"${cash_needed_at_close:,.0f}")
 
-
+col1, col2, col3 = st.columns(3)
 col1.metric("Stabilized NOI", f"${noi:,.0f}")
 col1.metric("Stabilized Value", f"${stabilized_value:,.0f}")
 
