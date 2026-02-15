@@ -1,202 +1,285 @@
 import streamlit as st
 import numpy as np
+import numpy_financial as npf
+
+st.set_page_config(page_title="Legacy Forced Appreciation Calculator", layout="wide")
+st.title("🏢 Legacy Forced Appreciation Calculator (Value-Add / BRRRR)")
+st.caption("Primary goal: buy deals that support **minimum +20% NOI** through forced appreciation.")
 
 # -----------------------------
-# Legacy Family Fund BRRRR Calculator (Single File App.py)
+# Helpers
 # -----------------------------
+def safe_div(a, b):
+    return a / b if b else 0.0
 
-st.set_page_config(page_title="Legacy BRRRR Calculator", layout="wide")
-st.title("🏢 Legacy Family Fund BRRRR Calculator")
+def annual_debt_service(loan, rate, years):
+    if loan <= 0:
+        return 0.0
+    r = rate / 12
+    n = years * 12
+    if r == 0:
+        return loan / years
+    pmt = loan * (r * (1 + r) ** n) / ((1 + r) ** n - 1)
+    return float(pmt * 12)
+
+def loan_balance_after_years(loan, rate, years_amort, years_elapsed):
+    """Annual approximation using annual payment (screening-level)."""
+    if loan <= 0:
+        return 0.0
+    if years_elapsed <= 0:
+        return float(loan)
+    if rate == 0:
+        # straight-line principal
+        principal_paid = loan * min(years_elapsed / years_amort, 1.0)
+        return float(max(loan - principal_paid, 0.0))
+
+    # approximate annual amortization using annual payment
+    A = annual_debt_service(loan, rate, years_amort)
+    r = rate
+    k = years_elapsed
+    # B_k = P*(1+r)^k - A*(((1+r)^k - 1)/r)
+    B = loan * (1 + r) ** k - A * (((1 + r) ** k - 1) / r)
+    return float(max(B, 0.0))
+
+def fmt_money(x):
+    return f"${x:,.0f}"
 
 # -----------------------------
 # Sidebar Inputs
 # -----------------------------
-st.sidebar.header("Acquisition")
+st.sidebar.header("Deal Basics")
+purchase_price = st.sidebar.number_input("Purchase Price ($)", value=2_000_000.0, step=25_000.0)
+units = st.sidebar.number_input("Units", value=24, step=1, min_value=1)
 
-st.sidebar.subheader("Closing & Reserves")
+st.sidebar.divider()
+st.sidebar.header("In-Place Income")
+in_place_rent = st.sidebar.number_input("In-Place Rent / Unit (Monthly $)", value=1250.0, step=25.0)
+other_income_monthly = st.sidebar.number_input("Other Income (Monthly $)", value=0.0, step=50.0)
+vacancy = st.sidebar.number_input("Vacancy (%)", value=8.0, step=0.5) / 100
+
+st.sidebar.divider()
+st.sidebar.header("Value-Add Plan (After Stabilization)")
+rent_lift = st.sidebar.number_input("Rent Lift / Unit (Monthly $)", value=150.0, step=25.0)
+other_income_lift_monthly = st.sidebar.number_input("Other Income Lift (Monthly $)", value=200.0, step=50.0)
+vacancy_after = st.sidebar.number_input("Vacancy After (%)", value=6.0, step=0.5) / 100
+
+st.sidebar.divider()
+st.sidebar.header("Operating Expenses")
+# Keep it simple but powerful: before vs after expense ratio
+exp_ratio_before = st.sidebar.number_input("Expense Ratio BEFORE (% of EGI)", value=45.0, step=1.0) / 100
+exp_ratio_after = st.sidebar.number_input("Expense Ratio AFTER (% of EGI)", value=40.0, step=1.0) / 100
+
+st.sidebar.divider()
+st.sidebar.header("Rehab / Closing / Reserves")
 closing_cost_pct = st.sidebar.number_input("Closing Costs (% of Purchase)", value=2.0, step=0.25) / 100
-lender_fees_pct = st.sidebar.number_input("Lender Fees (% of Loan)", value=1.0, step=0.25) / 100
-initial_reserves = st.sidebar.number_input("Initial Reserves ($)", value=25000.0, step=5000.0)
+rehab_per_unit = st.sidebar.number_input("Rehab / Unit ($)", value=10_000.0, step=1_000.0)
+exterior_rehab = st.sidebar.number_input("Exterior / Other Rehab ($)", value=50_000.0, step=5_000.0)
+contingency_pct = st.sidebar.number_input("Rehab Contingency (%)", value=10.0, step=1.0) / 100
+initial_reserves = st.sidebar.number_input("Initial Reserves ($)", value=25_000.0, step=5_000.0)
 
-purchase_price = st.sidebar.number_input("Purchase Price ($)", value=2000000.0, step=50000.0)
-units = st.sidebar.number_input("Units", value=14, step=1, min_value=1)
-rent = st.sidebar.number_input("Market Rent per Unit ($/month)", value=1100.0, step=25.0)
-vacancy = st.sidebar.number_input("Vacancy (%)", value=7.0, step=0.5) / 100
+st.sidebar.divider()
+st.sidebar.header("Debt: Acquisition + Refi")
+acq_ltv = st.sidebar.number_input("Acquisition LTV (%)", value=80.0, step=1.0) / 100
+lender_fees_pct = st.sidebar.number_input("Lender Fees (% of Acq Loan)", value=1.0, step=0.25) / 100
 
-st.sidebar.header("Rehab")
-rehab_months = st.sidebar.number_input("Rehab Months", value=6, step=1, min_value=0)
-rehab_per_unit = st.sidebar.number_input("Rehab per Unit ($)", value=7000.0, step=500.0)
-exterior_rehab = st.sidebar.number_input("Exterior Rehab ($)", value=0.0, step=5000.0)
-
-st.sidebar.header("Financing")
-st.sidebar.subheader("Acquisition Loan")
-acq_ltv = st.sidebar.number_input("Acquisition LTV (%)", value=80.0, step=1.0, min_value=0.0, max_value=100.0) / 100
-
-st.sidebar.subheader("Refi Assumptions")
-exit_cap = st.sidebar.number_input("Exit Cap Rate (%)", value=7.0, step=0.25, min_value=0.1) / 100
-refi_ltv = st.sidebar.number_input("Refi LTV (%)", value=75.0, step=1.0, min_value=0.0, max_value=100.0) / 100
-refi_rate = st.sidebar.number_input("Refi Rate (%)", value=7.25, step=0.25, min_value=0.0) / 100
+refi_ltv = st.sidebar.number_input("Refi LTV (%)", value=75.0, step=1.0) / 100
+refi_rate = st.sidebar.number_input("Refi Rate (%)", value=7.25, step=0.25) / 100
 amort_years = st.sidebar.number_input("Amortization (Years)", value=30, step=1, min_value=1)
 
-st.sidebar.header("Operating Assumptions")
-expense_ratio = st.sidebar.number_input("Expense Ratio (%)", value=40.0, step=1.0, min_value=0.0, max_value=100.0) / 100
+st.sidebar.divider()
+st.sidebar.header("Caps + Targets")
+cap_refi = st.sidebar.number_input("Refi Cap Rate (%)", value=6.5, step=0.25) / 100
+cap_sale = st.sidebar.number_input("Sale Cap Rate (Hold Exit) (%)", value=6.75, step=0.25) / 100
+sale_cost_pct = st.sidebar.number_input("Sale Costs (% of Sale Price)", value=3.0, step=0.25) / 100
 
-st.sidebar.header("Investor Return Assumptions")
-hold_years = st.sidebar.number_input("Hold Period (Years)", value=7, step=1, min_value=1)
-noi_growth = st.sidebar.number_input("NOI Growth (%/yr)", value=3.0, step=0.25, min_value=-50.0, max_value=50.0) / 100
-exit_cap_sale = st.sidebar.number_input("Exit Cap at Sale (%)", value=float(exit_cap * 100), step=0.25, min_value=0.1) / 100
-sale_cost_pct = st.sidebar.number_input("Sale Costs (% of Sale Price)", value=2.0, step=0.25, min_value=0.0, max_value=20.0) / 100
+noi_target_pct = st.sidebar.number_input("NOI Increase Target (%)", value=20.0, step=1.0) / 100
+min_dscr = st.sidebar.number_input("Minimum DSCR Target", value=1.20, step=0.05)
 
-# -----------------------------
-# Helper Functions
-# -----------------------------
-def annual_payment(rate: float, nper_years: int, pv: float) -> float:
-    """Annual mortgage payment for a fully-amortizing loan."""
-    if pv <= 0:
-        return 0.0
-    if rate <= 0:
-        return pv / nper_years
-    return (rate * pv) / (1 - (1 + rate) ** (-nper_years))
-
-def safe_irr(cashflows: list[float]) -> float:
-    """
-    Robust IRR using bisection (no numpy_financial required).
-    Returns np.nan if IRR can't be found.
-    """
-    # Need at least one negative and one positive cashflow
-    if not (any(cf < 0 for cf in cashflows) and any(cf > 0 for cf in cashflows)):
-        return np.nan
-
-    def npv(r: float) -> float:
-        return sum(cf / ((1 + r) ** t) for t, cf in enumerate(cashflows))
-
-    low, high = -0.999, 10.0  # allow very high IRRs
-    f_low, f_high = npv(low), npv(high)
-
-    # If no sign change, can't guarantee a root
-    if np.isnan(f_low) or np.isnan(f_high) or (f_low * f_high > 0):
-        return np.nan
-
-    for _ in range(200):
-        mid = (low + high) / 2
-        f_mid = npv(mid)
-        if abs(f_mid) < 1e-8:
-            return mid
-        if f_low * f_mid <= 0:
-            high = mid
-            f_high = f_mid
-        else:
-            low = mid
-            f_low = f_mid
-    return (low + high) / 2
+st.sidebar.divider()
+st.sidebar.header("Optional: Hold Returns")
+show_hold = st.sidebar.toggle("Show 5-Year IRR / Equity Multiple", value=True)
+hold_years = st.sidebar.number_input("Hold Years", value=5, step=1, min_value=1)
+noi_growth_after = st.sidebar.number_input("Annual NOI Growth After Stabilization (%)", value=3.0, step=0.25) / 100
 
 # -----------------------------
-# Calculations
+# Core Calculations
 # -----------------------------
+# Rehab / close
+base_rehab = units * rehab_per_unit + exterior_rehab
+rehab_total = base_rehab * (1 + contingency_pct)
+closing_costs = purchase_price * closing_cost_pct
 
-# Acquisition loan and cash needed at close
 acq_loan = purchase_price * acq_ltv
 down_payment = purchase_price - acq_loan
-purchase_closing_costs = purchase_price * closing_cost_pct
 lender_fees = acq_loan * lender_fees_pct
 
-total_rehab = rehab_per_unit * units + exterior_rehab
+cash_needed_at_close = down_payment + closing_costs + lender_fees + rehab_total + initial_reserves
 
-cash_needed_at_close = down_payment + purchase_closing_costs + lender_fees + total_rehab + initial_reserves
+# Income BEFORE
+gpr_before = units * in_place_rent * 12
+other_before = other_income_monthly * 12
+gpi_before = gpr_before + other_before
+vac_loss_before = gpi_before * vacancy
+egi_before = gpi_before - vac_loss_before
+opex_before = egi_before * exp_ratio_before
+noi_before = egi_before - opex_before
 
-# Stabilized NOI (simple pro-forma)
-gross_rent = units * rent * 12
-effective_income = gross_rent * (1 - vacancy)
-expenses = effective_income * expense_ratio
-noi = effective_income - expenses
+# Income AFTER value-add
+new_rent = in_place_rent + rent_lift
+gpr_after = units * new_rent * 12
+other_after = (other_income_monthly + other_income_lift_monthly) * 12
+gpi_after = gpr_after + other_after
+vac_loss_after = gpi_after * vacancy_after
+egi_after = gpi_after - vac_loss_after
+opex_after = egi_after * exp_ratio_after
+noi_after = egi_after - opex_after
 
-# Value and refi loan
-stabilized_value = noi / exit_cap if exit_cap > 0 else 0.0
-refi_loan = stabilized_value * refi_ltv
+# NOI lift / forced appreciation
+noi_increase = noi_after - noi_before
+noi_lift_pct = safe_div(noi_increase, noi_before)
 
-# Refi debt service and DSCR
-annual_debt = annual_payment(refi_rate, int(amort_years), refi_loan)
-dscr = (noi / annual_debt) if annual_debt > 0 else np.nan
+value_before = safe_div(noi_before, cap_refi)
+value_after = safe_div(noi_after, cap_refi)
+value_created = value_after - value_before
 
-# -----------------------------
-# Correct BRRRR refinance proceeds math
-# -----------------------------
-# Refi proceeds only happen if new refi loan > acquisition loan payoff
-refi_proceeds = max(refi_loan - acq_loan, 0.0)
+# Refi sizing off AFTER NOI (this is forced appreciation thesis)
+refi_loan = value_after * refi_ltv
+annual_debt = annual_debt_service(refi_loan, refi_rate, amort_years)
+dscr = safe_div(noi_after, annual_debt)
 
-# Cash left in deal is investor cash still trapped after cash-out
-cash_left_in_deal = max(cash_needed_at_close - refi_proceeds, 0.0)
+# Cash-out and cash left (BRRRR logic)
+cash_out = max(refi_loan - acq_loan, 0.0)
+cash_left_in_deal = max(cash_needed_at_close - cash_out, 0.0)
+cash_out_multiple = safe_div(cash_out, cash_needed_at_close)
 
-cash_out_multiple = (refi_proceeds / cash_needed_at_close) if cash_needed_at_close > 0 else 0.0
+# Cash flow to equity (after refi, stabilized)
+annual_cashflow = noi_after - annual_debt
+monthly_cashflow = annual_cashflow / 12
+coc = safe_div(annual_cashflow, cash_left_in_deal)  # cash-on-cash on remaining trapped equity
 
-# -----------------------------
-# Investor return metrics (simple model)
-# -----------------------------
-# Year 1 cash flow to equity (NOI - debt service)
-year1_cfe = noi - annual_debt
-cash_on_cash = (year1_cfe / cash_left_in_deal) if cash_left_in_deal > 0 else 0.0
+# Targets
+meets_noi_target = noi_lift_pct >= noi_target_pct
+meets_dscr_target = dscr >= min_dscr
 
-# Build a simple annual cashflow stream for IRR:
-# t0: -cash_needed_at_close
-# t1..t(hold_years-1): annual cash flow (growing with NOI growth, debt constant)
-# t_hold: annual cash flow + net sale proceeds
-cashflows = [-cash_needed_at_close]
+# What NOI is required to hit +20% (diagnostic)
+noi_required_for_target = noi_before * (1 + noi_target_pct)
+noi_gap_to_target = max(noi_required_for_target - noi_after, 0.0)
 
-noi_t = noi
-for _yr in range(1, hold_years):
-    year_cfe = (noi_t - annual_debt)
-    cashflows.append(year_cfe)
-    noi_t = noi_t * (1 + noi_growth)
-
-# Exit sale proceeds in final year
-noi_exit = noi_t
-sale_price = (noi_exit / exit_cap_sale) if exit_cap_sale > 0 else 0.0
-sale_costs = sale_price * sale_cost_pct
-net_sale_before_debt = max(sale_price - sale_costs, 0.0)
-
-# Simple assumption: loan payoff equals refi_loan (no amortization tracked here)
-loan_payoff = refi_loan
-net_sale_proceeds = max(net_sale_before_debt - loan_payoff, 0.0)
-
-final_year_cfe = (noi_exit - annual_debt) + net_sale_proceeds
-cashflows.append(final_year_cfe)
-
-irr = safe_irr(cashflows)
-
-total_distributions = sum(cf for cf in cashflows[1:] if cf > 0)
-equity_multiple = (total_distributions / cash_needed_at_close) if cash_needed_at_close > 0 else 0.0
+# Rent lift needed per unit to hit target (approx)
+# Convert NOI gap to EGI gap using AFTER expense ratio (screening)
+# NOI = EGI * (1 - exp_ratio_after)
+required_egi_increase = safe_div(noi_gap_to_target, (1 - exp_ratio_after))
+required_rent_per_unit_month = safe_div(required_egi_increase, (units * 12))
 
 # -----------------------------
-# Output UI
+# MAIN VIEW: Forced Appreciation Snapshot
 # -----------------------------
-st.subheader("Capital Needed")
-st.metric("Cash Needed at Close (All-In)", f"${cash_needed_at_close:,.0f}")
+st.subheader("Forced Appreciation Snapshot")
 
-col1, col2, col3 = st.columns(3)
-col1.metric("Stabilized NOI", f"${noi:,.0f}")
-col1.metric("Stabilized Value", f"${stabilized_value:,.0f}")
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("NOI (In-Place)", fmt_money(noi_before))
+m2.metric("NOI (After Value-Add)", fmt_money(noi_after))
+m3.metric("NOI Increase", fmt_money(noi_increase))
+m4.metric("NOI Lift %", f"{noi_lift_pct*100:.1f}%")
 
-col2.metric("Refi Loan", f"${refi_loan:,.0f}")
-col2.metric("Annual Debt Service", f"${annual_debt:,.0f}")
+s1, s2, s3, s4 = st.columns(4)
+s1.metric("Value (In-Place @ Refi Cap)", fmt_money(value_before))
+s2.metric("Value (After @ Refi Cap)", fmt_money(value_after))
+s3.metric("Value Created", fmt_money(value_created))
+s4.metric("Target NOI Lift", f"{noi_target_pct*100:.0f}%")
 
-col3.metric("DSCR", "—" if np.isnan(dscr) else f"{dscr:.2f}")
+# Pass/Fail bar
+st.divider()
+p1, p2, p3 = st.columns(3)
+p1.metric("NOI Target Met?", "✅ YES" if meets_noi_target else "❌ NO")
+p2.metric("DSCR Target Met?", "✅ YES" if meets_dscr_target else "❌ NO")
+p3.metric("Stabilized DSCR", f"{dscr:.2f}")
 
-st.subheader("Refinance Results")
-c4, c5, c6 = st.columns(3)
-c4.metric("Refi Proceeds (Cash-Out)", f"${refi_proceeds:,.0f}")
-c5.metric("Cash Left in Deal", f"${cash_left_in_deal:,.0f}")
-c6.metric("Cash-Out Multiple", f"{cash_out_multiple:.2f}x")
+# -----------------------------
+# BRRRR / Refi Results
+# -----------------------------
+st.subheader("BRRRR / Refi Results (Based on After NOI)")
 
-st.subheader("Investor Return Metrics")
-r1, r2, r3 = st.columns(3)
-r1.metric("Cash-on-Cash (Year 1)", f"{cash_on_cash*100:.2f}%")
-r2.metric("IRR (Projected)", "—" if np.isnan(irr) else f"{irr*100:.2f}%")
-r3.metric("Equity Multiple", f"{equity_multiple:.2f}x")
+r1, r2, r3, r4 = st.columns(4)
+r1.metric("Cash Needed at Close", fmt_money(cash_needed_at_close))
+r2.metric("Refi Loan (After)", fmt_money(refi_loan))
+r3.metric("Cash-Out (After)", fmt_money(cash_out))
+r4.metric("Cash-Out Multiple", f"{cash_out_multiple:.2f}x")
 
-with st.expander("Show Assumptions + Cashflows"):
-    st.write("**Cashflows (annual):**")
-    st.write(cashflows)
-    st.write(f"Year 1 CFE: ${year1_cfe:,.0f}")
-    st.write(f"Sale Price (Year {hold_years}): ${sale_price:,.0f}")
-    st.write(f"Net Sale Proceeds: ${net_sale_proceeds:,.0f}")
+rr1, rr2, rr3, rr4 = st.columns(4)
+rr1.metric("Cash Left in Deal", fmt_money(cash_left_in_deal))
+rr2.metric("Annual Debt Service", fmt_money(annual_debt))
+rr3.metric("Annual Cash Flow (After Debt)", fmt_money(annual_cashflow))
+rr4.metric("Monthly Cash Flow", fmt_money(monthly_cashflow))
+
+# Cash-on-cash on remaining equity
+st.metric("Cash-on-Cash (on Cash Left in Deal)", f"{coc*100:.2f}%")
+
+# -----------------------------
+# Value-Add Requirement Diagnostic
+# -----------------------------
+st.subheader("20% NOI Target Diagnostic")
+
+d1, d2, d3 = st.columns(3)
+d1.metric("NOI Required for +20%", fmt_money(noi_required_for_target))
+d2.metric("NOI Gap (If Any)", fmt_money(noi_gap_to_target))
+d3.metric("Rent Lift Needed / Unit / Mo (approx)", f"${required_rent_per_unit_month:,.0f}")
+
+st.caption(
+    "Rent-lift-needed is a screening estimate using AFTER expense ratio and assumes the NOI gap is solved purely by increasing EGI."
+)
+
+# -----------------------------
+# Optional Hold Returns (simple, credible)
+# -----------------------------
+if show_hold:
+    st.divider()
+    st.subheader("Hold Returns (Screening)")
+
+    # Cashflows: equity invested is cash_left_in_deal (after refi)
+    equity_invested = cash_left_in_deal
+
+    # If equity is zero (full cash-out), set small epsilon so math doesn't explode
+    if equity_invested <= 0:
+        equity_invested = 1.0
+
+    cashflows = [-equity_invested]
+    noi_t = noi_after
+
+    for y in range(1, hold_years + 1):
+        if y > 1:
+            noi_t *= (1 + noi_growth_after)
+
+        cfe = noi_t - annual_debt
+
+        if y == hold_years:
+            sale_price = safe_div(noi_t, cap_sale)
+            sale_net = sale_price * (1 - sale_cost_pct)
+            bal = loan_balance_after_years(refi_loan, refi_rate, amort_years, hold_years)
+            net_sale = max(sale_net - bal, 0.0)
+            cfe += net_sale
+
+        cashflows.append(cfe)
+
+    irr = float(npf.irr(cashflows))
+    total_positive = sum([cf for cf in cashflows if cf > 0])
+    equity_multiple = safe_div(total_positive, equity_invested)
+
+    h1, h2, h3 = st.columns(3)
+    h1.metric("Projected IRR", f"{irr*100:.1f}%")
+    h2.metric("Equity Multiple", f"{equity_multiple:.2f}x")
+    h3.metric("Hold Years", str(int(hold_years)))
+
+    st.caption("Hold model is annual screening: NOI grows, debt service held constant, sale uses exit cap + sale costs + remaining loan balance estimate.")
+
+# -----------------------------
+# Bottom Notes
+# -----------------------------
+st.divider()
+st.write("### How to use this tool")
+st.write(
+    "- Focus on **NOI Lift %** and **Value Created** first.\n"
+    "- If NOI Lift is below target, use the diagnostic to see the approximate **rent lift needed**.\n"
+    "- Then check **DSCR** and **Cash-Out / Cash Left** to confirm the deal supports the forced appreciation thesis.\n"
+)
 
